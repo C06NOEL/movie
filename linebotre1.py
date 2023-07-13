@@ -1,7 +1,11 @@
 from flask import Flask, request, abort
+import requests
+import json
 import sqlite3
 import pandas as pd
-import requests
+import os
+import re
+from dotenv import load_dotenv
 from urllib.parse import *
 from random import random
 from recommovie import Recommand_System
@@ -14,18 +18,53 @@ from linebot.models import MessageEvent, TextMessage,TextSendMessage, StickerSen
 from sear import CinemaFinder
 from searh import YahooMovies,IMDbMovies
 from Function_list import RoutePlanning
+config = load_dotenv(".env")
+line_bot_api_ = os.getenv("line_bot_api")
+handler_ = os.getenv("handler")
+
+def menu():
+# 輸入 Access Token，記得前方要加上「Bearer 」( 有一個空白 )
+    headers = {'Authorization':'Bearer uT6QFkMstvp6mYFfIVWfXLBQYLzG2QWvsCqvHD8aiLKchArpOCiiPfF9jbcl+ozXMiHvm3ScesDW/f5419JPc0qP86/bKPetMPnvn2kkZx18z9skFHVjw7HxnsXJtoNe7pfHv/9EwtSGkLlTaLAmLgdB04t89/1O/w1cDnyilFU=','Content-Type':'application/json'}
+
+    # 需補上'action'設定
+    body = {
+        'size': {'width': 1250, 'height': 843},   # 設定尺寸
+        'selected': 'true',                        # 預設是否顯示
+        'name': 'movie bot menu',                   # 選單名稱
+        'chatBarText': 'Movie Bot Menu',            # 選單在 LINE 顯示的標題
+        'areas':[                                  # 選單內容
+            {
+            'bounds': {'x': 5, 'y': 0, 'width': 406, 'height': 843}, # 選單位置與大小
+            'action': { "type": "uri","label": "Location",'uri':'https://line.me/R/nv/location'} # 點擊地標圖示後的動作
+            },
+            {
+            'bounds': {'x': 421, 'y': 0, 'width': 406, 'height': 843},
+            'action': {  "type": "postback","label":"我想看更多","data":"@M1"} # 點擊隨機圖示後的動作
+            },
+            {
+            'bounds': {'x': 837, 'y': 0, 'width':406, 'height': 843},
+            'action': { 'type': 'uri', 'label': '點我推薦', 'uri':'https://line.me/R/oaMessage/@708tiikx/?%E9%9B%BB%E5%BD%B1'}  # 點擊放大鏡圖示後的動作
+            }
+        ]
+    }
+    # 向指定網址發送 request
+    req = requests.request('POST', 'https://api.line.me/v2/bot/richmenu',headers=headers,data=json.dumps(body).encode('utf-8'))
+    return req.text
+aa=menu()
+fin=aa.find(':')
+menunum=aa[(fin+2):-2]
 
 # 輸入 Falsk
 app = Flask(__name__)
 ngrok.set_auth_token("2RdHs1UrRrb83ptGi03LZPOkCHs_6Cy2Tm1tNsZuBSEZdfCQN")
 # LINE 聊天機器人的基本資料
-line_bot_api = LineBotApi('uT6QFkMstvp6mYFfIVWfXLBQYLzG2QWvsCqvHD8aiLKchArpOCiiPfF9jbcl+ozXMiHvm3ScesDW/f5419JPc0qP86/bKPetMPnvn2kkZx18z9skFHVjw7HxnsXJtoNe7pfHv/9EwtSGkLlTaLAmLgdB04t89/1O/w1cDnyilFU=')
-handler = WebhookHandler('45fd3d1dff87fe5ff90bc9e35455b1b1')
+line_bot_api = LineBotApi(line_bot_api_)
+handler = WebhookHandler(handler_)
 # 輸入 圖文選單 ID
 with open('圖文選單.jpg', 'rb') as f:
-    line_bot_api.set_rich_menu_image('richmenu-2963ba8f4575c098977a0897dbc486c6', 'image/jpeg', f)
+    line_bot_api.set_rich_menu_image(menunum, 'image/jpeg', f)
 headers = {'Authorization':'Bearer uT6QFkMstvp6mYFfIVWfXLBQYLzG2QWvsCqvHD8aiLKchArpOCiiPfF9jbcl+ozXMiHvm3ScesDW/f5419JPc0qP86/bKPetMPnvn2kkZx18z9skFHVjw7HxnsXJtoNe7pfHv/9EwtSGkLlTaLAmLgdB04t89/1O/w1cDnyilFU=','Content-Type':'application/json'}
-req = requests.request('POST', f'https://api.line.me/v2/bot/user/all/richmenu/richmenu-2963ba8f4575c098977a0897dbc486c6', headers=headers)    
+req = requests.request('POST', f'https://api.line.me/v2/bot/user/all/richmenu/{menunum}', headers=headers)
 #接收用戶端訊息
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -48,6 +87,7 @@ def handle_message(event):
     tk=event.reply_token
     mtext = event.message.text
     reply_msg = ''
+    template_msg = '年度：\n中文片名：\n原文片名：\n國別：\n語言：\n類型：'
     if mtext[0:2]=="電影":
         try:
             YahooMovies_info = YahooMovies()
@@ -199,28 +239,14 @@ def handle_message(event):
         except:
             reply_msg=[TextSendMessage(text='我壞掉了！搶救中'),StickerSendMessage(package_id=6632,sticker_id=11825391)]
             line_bot_api.reply_message(tk, reply_msg)     
-    elif mtext[:2]=='年度' :      
+    
+    elif template_msg == re.sub(r'：.*?(?=\n|$)', '：', mtext):   
         mtext=mtext
         RS = Recommand_System()
         request = RS.cleanmsg(mtext)
         reply=RS.random_recommand(request)
         reply_msg=[TextSendMessage(text=reply[0]),TextSendMessage(text=reply[1]),TextSendMessage(text=reply[2]),StickerSendMessage(package_id=1070,sticker_id=17841)]
         line_bot_api.reply_message(tk,reply_msg)  
-    elif mtext[:1]=='M':
-        ts=mtext
-        if '&' in ts:
-            stridex=ts.find('&')
-            movie_name=ts[1:stridex]
-            url=ts[(stridex+1):]
-            IMDbMovies_info = IMDbMovies(movie_name)
-            IMDb_reviews=IMDbMovies_info.specific_movie_reviews(url)
-            if len(IMDb_reviews)>=1 :
-                reply_msg=TextSendMessage(text=str(IMDb_reviews))
-            else:
-                reply_msg=TextSendMessage(text='請再輸入一次')
-        else:
-            reply_msg=TextSendMessage(text='請再輸入一次')
-        line_bot_api.reply_message(tk,reply_msg)
         
     else:
         try:
@@ -365,7 +391,6 @@ def handle_message1(event):
             result = finder.order_df_dist_google(filtered_data)
             #將回傳數值轉成字串
             result=result.to_dict()
-            
             flex_message = FlexSendMessage(alt_text='您有新訊息',
                                         contents={"type": "carousel",
                                                 "contents": [{
