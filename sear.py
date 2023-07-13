@@ -8,8 +8,8 @@ from Function_list import RoutePlanning
 class CinemaFinder:
     def __init__(self,location):
         
-        self.apikey = 'AIzaSyD8q84fKb7MLNHwSPta5_1oYFv-dS8vF2Q'
-        self.gmaps = googlemaps.Client(key='AIzaSyD8q84fKb7MLNHwSPta5_1oYFv-dS8vF2Q')
+        self.apikey = 'google-api'
+        self.gmaps = googlemaps.Client(key='google-api')
         self.location = location
 
     # 取得規劃路線距離、估計時間
